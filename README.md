@@ -1,20 +1,8 @@
-# Semana 13: Carrera de LEDs (Registros AVR y ASM Inline)
+# Semana 13 — GPIO en el ATmega328P: Del C al Ensamblador
 
 
 
-Prácticas de programación a bajo nivel en microcontroladores AVR (Arduino) manipulando registros directamente en **C puro** y **Ensamblador (ASM) inline**, eliminando la abstracción de funciones estándar como `pinMode()`, `digitalWrite()` y `delay()`.
-
-
-
-> **Nota de uso:** Cada archivo `.ino` contiene las distintas variantes y retos comentados internamente. Descomente únicamente la sección que desee probar antes de compilar y cargar el programa en la placa.
-
-
-
----
-
-
-
-## Estructura del Repositorio
+## Contenido del repositorio
 
 
 
@@ -22,59 +10,57 @@ Prácticas de programación a bajo nivel en microcontroladores AVR (Arduino) man
 
 Semana13/
 
-├── lab13a/
+├── lab13a/lab13a.ino  → Configuración de registros (C puro)
 
-│   └── lab13a.ino    # Configuración de registros (C puro)
+├── lab13b/lab13b.ino  → ASM inline AVR (sbi, cbi, out)
 
-├── lab13b/
+├── lab13c/lab13c.ino  → Carrera de LEDs (registros + ASM inline)
 
-│   └── lab13b.ino    # ASM inline AVR (sbi, cbi, out)
-
-├── lab13c/
-
-│   └── lab13c.ino    # Carrera de LEDs (registros + ASM inline)
-
-└── README.md         # Documentación del proyecto
+└── README.md
 
 ```
 
 
 
+Cada sketch tiene los codigos comentados asi solo subimos el que nos interese para ver el funcionamiento
+
+
+
 ---
 
 
 
-## Prácticas y Retos
+## Lab 13a — Configuración de registros (C puro)
 
 
 
-### 1. Lab 13a — Configuración de Registros (C puro)
-
-Control de parpadeo del LED integrado en placa (**Pin 13 / `PB5`**) manipulando directamente los registros `DDRB` y `PORTB`.
+Parpadeo del LED integrado (pin 13 = PB5) usando directamente los registros DDRB y PORTB, sin pinMode ni digitalWrite.
 
 
 
-| Variante | Descripción |
+| | Descripción |
 
 | :---: | :--- |
 
-| **`0`** | **Código base:** Parpadeo estándar cada `500 ms`. |
+| 0 | Código base: parpadeo cada 500 ms |
 
-| **`1`** | **Reto 1:** Parpadeo rápido cada `200 ms`. |
+| 1 | Reto 1: parpadeo cada 200 ms |
 
-| **`2`** | **Reto 2:** Parpadeo sin `delay()`, implementando un bucle `for` y una variable `volatile`. |
+| 2 | Reto 2: parpadeo sin delay(), con bucle for y variable volatile |
 
 
 
-#### Conceptos clave
+### Conceptos
 
-* **`DDRB |= (1 << PB5)`**: Configura el bit 5 del puerto B como salida.
 
-* **`PORTB |= (1 << PB5)`** / **`PORTB &= ~(1 << PB5)`**: Enciende (`HIGH`) y apaga (`LOW`) el LED mediante operaciones a nivel de bits.
 
-* **Orden de inicialización**: `DDRB` debe configurarse antes que `PORTB`; de lo contrario, escribir un `1` en un pin configurado como entrada solo activa su resistencia *pull-up* interna.
+- `DDRB |= (1 << PB5)` configura PB5 como salida.
 
-* **Calificador `volatile`**: Evita que el compilador optimice y elimine el bucle vacío de retardo al considerarlo código muerto.
+- `PORTB |= (1 << PB5)` pone el pin en alto (LED encendido); `PORTB &= ~(1 << PB5)` lo pone en bajo.
+
+- `DDRB` debe configurarse antes que `PORTB`: si el pin sigue como entrada, escribir 1 en PORTB solo activa la resistencia pull-up interna.
+
+- `volatile` evita que el compilador elimine el bucle de retardo por considerarlo inútil.
 
 
 
@@ -82,33 +68,39 @@ Control de parpadeo del LED integrado en placa (**Pin 13 / `PB5`**) manipulando 
 
 
 
-### 2. Lab 13b — ASM Inline AVR
-
-Misma funcionalidad de parpadeo en el **Pin 13**, controlada mediante instrucciones de ensamblador incrustadas en C.
+## Lab 13b — ASM inline AVR
 
 
 
-| Variante | Descripción |
+Mismo parpadeo del pin 13, ahora controlado con instrucciones de ensamblador AVR.
+
+
+
+| | Descripción |
 
 | :---: | :--- |
 
-| **`0`** | **Código base:** Encendido y apagado utilizando `sbi` / `cbi`. |
+| 0 | Código base: encendido/apagado con sbi / cbi |
 
-| **`1`** | **Reto 1:** Encendido y apagado escribiendo el puerto completo con `out`. |
+| 1 | Reto 1: encendido/apagado con out |
 
-| **`2`** | **Reto 2 (Bono):** Parpadeo y subrutina de retardo 100 % en ASM (sin `delay()`). |
+| 2 | Reto 2 (bono): parpadeo y retardo 100 % en ASM (sin delay()) |
 
 
 
-#### Conceptos clave
+### Conceptos
 
-* **Direcciones de I/O (Puerto B):** `PINB = 0x03`, `DDRB = 0x04`, `PORTB = 0x05`.
 
-* **Manipulación de bit único:** `sbi 0x05, 5` pone en `1` únicamente el bit 5 de `PORTB`; `cbi 0x05, 5` lo limpia a `0`.
 
-* **¿`sbi` u `out`?** `out` ejecuta en 1 ciclo de reloj, pero requiere cargar previamente el valor en un registro con `ldi` (sumando 2 ciclos en total, igual que `sbi`). Para un solo bit conviene `sbi`/`cbi` (no altera otros pines ni ocupa registros); para modificar múltiples pines simultáneamente, `out` es más eficiente.
+- Direcciones de I/O: `PINB = 0x03`, `DDRB = 0x04`, `PORTB = 0x05`.
 
-* **Retardo en ASM:** Subrutina de dos bucles anidados (`sbiw` / `brne`). El bucle interno consume $\approx 1\text{ ms}$ a $16\text{ MHz}$ ($3999\text{ iteraciones} \times 4\text{ ciclos}$) y el externo lo repite $N$ veces.
+- `sbi 0x05, 5` pone en 1 solo el bit 5 de PORTB; `cbi 0x05, 5` lo pone en 0.
+
+- `out` escribe el byte completo del puerto y necesita el valor en un registro.
+
+- ¿`sbi` u `out`? `out` tarda 1 ciclo pero requiere un `ldi` previo (2 ciclos en total, igual que `sbi`). Para cambiar un solo bit conviene `sbi`/`cbi` (no altera otros pines ni usa registros); para cambiar varios bits a la vez, `out` es más eficiente.
+
+- El retardo en ASM es una subrutina con dos bucles anidados (`sbiw` / `brne`): el interno dura ≈ 1 ms a 16 MHz (3999 vueltas × 4 ciclos) y el externo lo repite N veces.
 
 
 
@@ -116,55 +108,53 @@ Misma funcionalidad de parpadeo en el **Pin 13**, controlada mediante instruccio
 
 
 
-### 3. Lab 13c — Carrera de LEDs
-
-Secuencia luminosa bidireccional utilizando 4 LEDs externos conectados a los pines digitales **8 al 11** (`PB0`–`PB3`).
+## Lab 13c — Carrera de LEDs
 
 
 
-#### Esquema de Conexión
-
-*(Ánodo al pin correspondiente $\rightarrow$ Cátodo a resistencia de $220\ \Omega$ $\rightarrow$ `GND`)*
+Secuencia de 4 LEDs externos conectados en los pines 8–11 (PB0–PB3).
 
 
 
-| Componente | Pin Arduino | Bit AVR |
+| LED | Pin | Bit |
 
 | :---: | :---: | :---: |
 
-| **LED 1** | Pin `8` | `PB0` |
+| LED 1 | 8 | PB0 |
 
-| **LED 2** | Pin `9` | `PB1` |
+| LED 2 | 9 | PB1 |
 
-| **LED 3** | Pin `10` | `PB2` |
+| LED 3 | 10 | PB2 |
 
-| **LED 4** | Pin `11` | `PB3` |
-
-
-
-#### Variantes implementadas
+| LED 4 | 11 | PB3 |
 
 
 
-| Variante | Descripción |
+Cada LED: ánodo al pin, cátodo → resistencia de 220 Ω → GND.
+
+
+
+| | Descripción |
 
 | :---: | :--- |
 
-| **`0`** | **Código base:** Secuencia en C puro mediante desplazamiento (`PORTB = (1 << i)`). |
+| 0 | Código base en C puro (`PORTB = (1 << i)`) |
 
-| **`1`** | **Reto 1:** Bucle `for` en C que escribe el estado del puerto usando `out` en ASM inline. |
+| 1 | Reto 1: el for escribe el puerto con `out` (ASM inline) |
 
-| **`2`** | **Reto 2 + 3 (Bono):** Efecto ida y vuelta (`LED 1 → 4 → 1`) 100 % en ASM, incluyendo el retardo sin `delay()`. |
+| 2 | Reto 2 + Reto 3 (bono): ida y vuelta LED 1→4→1, todo en ASM, incluido el retardo (sin `delay()`) |
 
 
 
-#### Conceptos clave
+### Conceptos clave
 
-* **Configuración de pines:** Combinación de `in` / `ori` / `out` sobre `DDRB` para habilitar `PB0`–`PB3` como salidas sin alterar los bits restantes del puerto.
 
-* **Desplazamiento y límites:** Las instrucciones `lsl` (desplazamiento lógico a la izquierda) y `lsr` (a la derecha) mueven el LED activo; `cpi` junto con `breq`/`brne` detectan los extremos de la carrera para invertir el sentido.
 
-* **Transferencia al puerto:** `out 0x05, r18` copia el contenido del registro `r18` hacia `PORTB` (es obligatorio usar un registro intermedio, ya que `out` no admite valores inmediatos).
+- `in` / `ori` / `out` sobre DDRB configuran PB0–PB3 como salidas.
+
+- `lsl` / `lsr` desplazan el patrón para avanzar o regresar de LED; `cpi` + `breq`/`brne` detectan los extremos.
+
+- `out 0x05, r18` copia el registro r18 al puerto B; necesita un registro porque la instrucción `out` no acepta un valor inmediato.
 
 
 
@@ -172,16 +162,12 @@ Secuencia luminosa bidireccional utilizando 4 LEDs externos conectados a los pin
 
 
 
-## Evidencia en Video
+## Video
 
 
 
-Los videos demostrativos de cada laboratorio y reto en funcionamiento se encuentran organizados por carpetas en el siguiente enlace:
-
-
-
-* **[Repositorio de videos en Google Drive](https://drive.google.com/drive/folders/1VKNhdraiv7_pj9wBOLGbvb6UOopU4ifE?usp=sharing)**
-Video
 Link donde se encuentran los videos de los resultados divididos por carpetas
 
-(https://drive.google.com/drive/folders/1VKNhdraiv7_pj9wBOLGbvb6UOopU4ifE?usp=sharing)
+
+
+[Ver videos en Google Drive](https://drive.google.com/drive/folders/1VKNhdraiv7_pj9wBOLGbvb6UOopU4ifE?usp=sharing)
